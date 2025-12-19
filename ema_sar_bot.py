@@ -1,13 +1,13 @@
-# ===============================
-# EMA SAR PRO TRADING BOT
-# ALL-IN-ONE | RAILWAY | TERMUX
-# ===============================
+# ======================================================
+# EMA + PARABOLIC SAR PRO TRADING BOT
+# FINAL ALL-IN-ONE | RAILWAY | TERMUX
+# ======================================================
 
 import os
+import requests
 import sqlite3
-import logging
 import threading
-import time
+import logging
 from datetime import datetime
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -21,214 +21,209 @@ from telegram.ext import (
 from fastapi import FastAPI
 import uvicorn
 
-# ===============================
-# CONFIG
-# ===============================
+# ======================================================
+# CONFIG (USE RAILWAY VARIABLES)
+# ======================================================
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+PORT = int(os.getenv("PORT", 8000))
 
-BOT_ACTIVE = True
-AUTO_MODE = True
+SYMBOL = "BTCUSDT"        # change later if needed
+PAIR_NAME = "BTC/USDT"
 
-# ===============================
+# ======================================================
 # LOGGING
-# ===============================
-logging.basicConfig(
-    filename="bot.log",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# ======================================================
 
-# ===============================
-# DATABASE
-# ===============================
+logging.basicConfig(level=logging.INFO)
+
+# ======================================================
+# DATABASE (WIN / LOSS STORAGE)
+# ======================================================
+
 conn = sqlite3.connect("bot.db", check_same_thread=False)
-cursor = conn.cursor()
+cur = conn.cursor()
 
-cursor.execute("""
+cur.execute("""
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pair TEXT,
     signal TEXT,
-    result TEXT,
+    confidence REAL,
     time TEXT
 )
 """)
 conn.commit()
 
-# ===============================
-# INDICATOR LOGIC (SIMPLIFIED)
-# ===============================
+# ======================================================
+# BINANCE DATA + INDICATORS
+# ======================================================
+
+def fetch_klines(symbol, limit=100):
+    url = (
+        "https://api.binance.com/api/v3/klines"
+        f"?symbol={symbol}&interval=1m&limit={limit}"
+    )
+    data = requests.get(url, timeout=10).json()
+    closes = [float(c[4]) for c in data]
+    highs = [float(c[2]) for c in data]
+    lows = [float(c[3]) for c in data]
+    return closes, highs, lows
+
+
+def ema(prices, period):
+    k = 2 / (period + 1)
+    value = prices[0]
+    for p in prices[1:]:
+        value = p * k + value * (1 - k)
+    return value
+
+
+def parabolic_sar(highs, lows, af=0.02, max_af=0.2):
+    sar = lows[0]
+    ep = highs[0]
+    accel = af
+    uptrend = True
+
+    for i in range(1, len(highs)):
+        sar = sar + accel * (ep - sar)
+
+        if uptrend:
+            if lows[i] < sar:
+                uptrend = False
+                sar = ep
+                ep = lows[i]
+                accel = af
+            else:
+                if highs[i] > ep:
+                    ep = highs[i]
+                    accel = min(accel + af, max_af)
+        else:
+            if highs[i] > sar:
+                uptrend = True
+                sar = ep
+                ep = highs[i]
+                accel = af
+            else:
+                if lows[i] < ep:
+                    ep = lows[i]
+                    accel = min(accel + af, max_af)
+
+    return sar
+
+
 def get_ema_sar_signal():
-    # DEMO LOGIC (replace with real market data later)
-    minute = datetime.now().minute
-    if minute % 2 == 0:
-        return "BUY"
-    return "SELL"
+    closes, highs, lows = fetch_klines(SYMBOL)
 
-# ===============================
-# TELEGRAM UI
-# ===============================
-def main_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 Live Signal", callback_data="signal")],
-        [InlineKeyboardButton("📈 Trend", callback_data="trend"),
-         InlineKeyboardButton("🧮 Stats", callback_data="stats")],
-        [InlineKeyboardButton("⚙️ Settings", callback_data="settings")]
-    ])
+    ema9 = ema(closes[-30:], 9)
+    ema21 = ema(closes[-30:], 21)
+    sar = parabolic_sar(highs[-30:], lows[-30:])
+    price = closes[-1]
 
-# ===============================
-# COMMANDS
-# ===============================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🤖 *EMA SAR PRO BOT*\n\nSelect an option:",
-        reply_markup=main_menu(),
-        parse_mode="Markdown"
+    if ema9 > ema21 and price > sar:
+        signal = "BUY"
+    elif ema9 < ema21 and price < sar:
+        signal = "SELL"
+    else:
+        signal = "WAIT"
+
+    confidence = round(
+        min(95, abs(ema9 - ema21) * 100 + abs(price - sar)),
+        2
     )
 
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cursor.execute("SELECT COUNT(*) FROM signals WHERE result='WIN'")
-    wins = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM signals WHERE result='LOSS'")
-    losses = cursor.fetchone()[0]
-    total = wins + losses
-    acc = (wins / total * 100) if total else 0
+    return signal, confidence, price
 
-    msg = f"""
-📊 *Performance*
-Wins: {wins}
-Losses: {losses}
-Accuracy: {acc:.2f}%
-"""
-    await update.message.reply_text(msg, parse_mode="Markdown")
+# ======================================================
+# TELEGRAM DASHBOARD
+# ======================================================
 
-# ===============================
-# CALLBACK HANDLER
-# ===============================
+def dashboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📊 Live Signal", callback_data="signal")],
+        [InlineKeyboardButton("📈 Stats", callback_data="stats")]
+    ])
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🤖 *EMA SAR PRO BOT*\n\n"
+        "Live EMA(9/21) + Parabolic SAR\n"
+        "Binance 1-minute candles\n\n"
+        "Choose an option:",
+        parse_mode="Markdown",
+        reply_markup=dashboard()
+    )
+
+
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global BOT_ACTIVE, AUTO_MODE
     q = update.callback_query
     await q.answer()
 
     if q.data == "signal":
-        signal = get_ema_sar_signal()
-        cursor.execute(
-            "INSERT INTO signals (pair, signal, result, time) VALUES (?,?,?,?)",
-            ("BTC/USDT", signal, "WIN", datetime.now().isoformat())
+        signal, confidence, price = get_ema_sar_signal()
+
+        cur.execute(
+            "INSERT INTO signals (pair, signal, confidence, time) VALUES (?,?,?,?)",
+            (PAIR_NAME, signal, confidence, datetime.now().isoformat())
         )
         conn.commit()
-        await q.edit_message_text(
-            f"📊 *LIVE SIGNAL*\nPair: BTC/USDT\nSignal: *{signal}*",
-            parse_mode="Markdown",
-            reply_markup=main_menu()
+
+        msg = (
+            f"📊 *LIVE SIGNAL*\n\n"
+            f"Pair: *{PAIR_NAME}*\n"
+            f"Price: `{price}`\n"
+            f"Signal: *{signal}*\n"
+            f"Confidence: *{confidence}%*"
         )
 
-    elif q.data == "trend":
         await q.edit_message_text(
-            "📈 Trend: *STRONG TRENDING*",
+            msg,
             parse_mode="Markdown",
-            reply_markup=main_menu()
+            reply_markup=dashboard()
         )
 
     elif q.data == "stats":
-        cursor.execute("SELECT COUNT(*) FROM signals WHERE result='WIN'")
-        wins = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM signals WHERE result='LOSS'")
-        losses = cursor.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM signals WHERE signal='BUY'")
+        buys = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM signals WHERE signal='SELL'")
+        sells = cur.fetchone()[0]
+
         await q.edit_message_text(
-            f"🧮 Wins: {wins}\nLosses: {losses}",
-            reply_markup=main_menu()
+            f"📈 *Signal Stats*\n\n"
+            f"BUY: {buys}\n"
+            f"SELL: {sells}",
+            parse_mode="Markdown",
+            reply_markup=dashboard()
         )
 
-    elif q.data == "settings":
-        if q.from_user.id != ADMIN_ID:
-            await q.answer("⛔ Admin only", show_alert=True)
-            return
+# ======================================================
+# FASTAPI (RAILWAY HEALTH)
+# ======================================================
 
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⏸ Pause", callback_data="pause"),
-             InlineKeyboardButton("▶ Resume", callback_data="resume")],
-            [InlineKeyboardButton("🤖 Auto ON/OFF", callback_data="auto")]
-        ])
-        await q.edit_message_text("⚙️ Admin Settings", reply_markup=kb)
+api = FastAPI()
 
-    elif q.data == "pause":
-        BOT_ACTIVE = False
-        await q.answer("Bot Paused")
-
-    elif q.data == "resume":
-        BOT_ACTIVE = True
-        await q.answer("Bot Resumed")
-
-    elif q.data == "auto":
-        AUTO_MODE = not AUTO_MODE
-        await q.answer(f"Auto Mode: {AUTO_MODE}")
-
-# ===============================
-# ADMIN COMMANDS
-# ===============================
-async def pause(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global BOT_ACTIVE
-    if update.effective_user.id == ADMIN_ID:
-        BOT_ACTIVE = False
-        await update.message.reply_text("⏸ Bot Paused")
-
-async def resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global BOT_ACTIVE
-    if update.effective_user.id == ADMIN_ID:
-        BOT_ACTIVE = True
-        await update.message.reply_text("▶ Bot Resumed")
-
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-    msg = " ".join(context.args)
-    await update.message.reply_text(f"📢 Broadcast sent:\n{msg}")
-
-# ===============================
-# AUTO SIGNAL LOOP
-# ===============================
-async def auto_loop(app):
-    while True:
-        try:
-            if BOT_ACTIVE and AUTO_MODE:
-                signal = get_ema_sar_signal()
-                logging.info(f"AUTO SIGNAL: {signal}")
-            await asyncio.sleep(60)
-        except Exception as e:
-            logging.error(e)
-
-# ===============================
-# FASTAPI SERVER (RAILWAY)
-# ===============================
-app = FastAPI()
-
-@app.get("/")
+@api.get("/")
 def root():
     return {"status": "EMA SAR BOT RUNNING"}
 
 def run_api():
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    uvicorn.run(api, host="0.0.0.0", port=PORT)
 
-# ===============================
+# ======================================================
 # MAIN
-# ===============================
+# ======================================================
+
 def main():
-    print("🤖 EMA SAR BOT RUNNING SUCCESSFULLY")
+    print("🤖 EMA SAR BOT RUNNING (REAL EMA + SAR)")
 
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("stats", stats))
-    application.add_handler(CommandHandler("pause", pause))
-    application.add_handler(CommandHandler("resume", resume))
-    application.add_handler(CommandHandler("broadcast", broadcast))
-    application.add_handler(CallbackQueryHandler(callbacks))
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(callbacks))
 
     threading.Thread(target=run_api, daemon=True).start()
-
-    application.run_polling()
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
