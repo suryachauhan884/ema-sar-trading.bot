@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TradeWin PRO Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header class="topbar">
+  <div class="logo">📊 TradeWin PRO</div>
+  <div class="status">🟢 Bot Active</div>
+</header>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="openTab('binaryTab', this)">
+    Olymp Trade (Binary)
+  </button>
+  <button class="tab-btn" onclick="openTab('angelTab', this)">
+    Angel One (Stocks)
+  </button>
+</div>
+
+<!-- ================= BINARY TAB ================= -->
+<div id="binaryTab" class="tab-content active">
+
+  <div class="panel">
+    <h2>Olymp Trade – Binary Chart</h2>
+
+    <div class="stats">
+      <div>Pair: <b>EUR/USD</b></div>
+      <div>Timeframe: <b>1 Min</b></div>
+      <div>Trend: <b id="binaryTrend">Live</b></div>
+      <div>Signal: <b id="binarySignal">Waiting...</b></div>
+    </div>
+
+    <!-- TradingView Binary Chart -->
+    <div class="chart">
+      <div id="tv-binary"></div>
+    </div>
+
+    <button class="action-btn" onclick="getBinarySignal()">
+      📈 Get EMA + SAR Signal
+    </button>
+  </div>
+
+</div>
+
+<!-- ================= ANGEL ONE TAB ================= -->
+<div id="angelTab" class="tab-content">
+
+  <div class="panel">
+    <h2>Angel One – Live Stock Chart</h2>
+
+    <div class="stats">
+      <div>Stock: <b>RELIANCE</b></div>
+      <div>Timeframe: <b>5 Min</b></div>
+      <div>Market: <b>NSE</b></div>
+      <div>Mode: <b>Analysis Only</b></div>
+    </div>
+
+    <!-- TradingView Angel One Chart -->
+    <div class="chart">
+      <div id="tv-angel"></div>
+    </div>
+
+    <div class="note">
+      ⚠️ For analysis only. Execute trades manually in Angel One app.
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= SCRIPTS ================= -->
+
+<script src="https://s3.tradingview.com/tv.js"></script>
+
+<script>
+/* TAB SWITCH */
+function openTab(tabId, btn) {
+  document.querySelectorAll(".tab-content").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+
+  document.getElementById(tabId).classList.add("active");
+  btn.classList.add("active");
+}
+
+/* GET SIGNAL */
+async function getBinarySignal() {
+  const res = await fetch("/api/binary/signal");
+  const data = await res.json();
+
+  if (data.signal === "WAIT") {
+    document.getElementById("binarySignal").innerText = "WAIT";
+  } else {
+    document.getElementById("binarySignal").innerText =
+      data.signal + " (" + data.confidence + "%)";
+  }
+}
+</script>
+
+<script>
+/* OLYMP TRADE – LIVE FX CHART */
+new TradingView.widget({
+  "width": "100%",
+  "height": 380,
+  "symbol": "FX:EURUSD",
+  "interval": "1",
+  "timezone": "Asia/Kolkata",
+  "theme": "dark",
+  "style": "1",
+  "locale": "en",
+  "hide_top_toolbar": true,
+  "hide_legend": true,
+  "enable_publishing": false,
+  "container_id": "tv-binary"
+});
+
+/* ANGEL ONE – LIVE NSE CHART */
+new TradingView.widget({
+  "width": "100%",
+  "height": 380,
+  "symbol": "NSE:RELIANCE",
+  "interval": "5",
+  "timezone": "Asia/Kolkata",
+  "theme": "dark",
+  "style": "1",
+  "locale": "en",
+  "hide_top_toolbar": false,
+  "enable_publishing": false,
+  "container_id": "tv-angel"
+});
+</script>
+
+</body>
+</html>
