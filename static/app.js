@@ -1,76 +1,42 @@
-let binaryWidget, angelWidget;
-let countdown = 60;
+// ==================================================
+// TradeWin LIVE Signal Auto Refresh
+// ==================================================
 
-// ================= TABS =================
-function showTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById(tab).classList.add('active');
+const API_URL = "/api/binary/signal";
+const REFRESH_INTERVAL = 60000; // 60 seconds
+
+async function fetchSignal() {
+    try {
+        const response = await fetch(API_URL);
+        const data = await response.json();
+
+        document.getElementById("pair").innerText = data.pair;
+        document.getElementById("timeframe").innerText = data.timeframe;
+        document.getElementById("signal").innerText = data.signal;
+        document.getElementById("confidence").innerText = data.confidence + "%";
+        document.getElementById("strategy").innerText = data.strategy;
+        document.getElementById("status").innerText = data.status;
+
+        // Color signal
+        const signalBox = document.getElementById("signal");
+        if (data.signal === "BUY") {
+            signalBox.style.color = "#00ff88";
+        } else if (data.signal === "SELL") {
+            signalBox.style.color = "#ff4d4d";
+        } else {
+            signalBox.style.color = "#ffaa00";
+        }
+
+        console.log("Signal updated:", data);
+
+    } catch (error) {
+        console.error("Error fetching signal:", error);
+        document.getElementById("status").innerText = "DISCONNECTED";
+    }
 }
 
-// ================= COUNTDOWN =================
-setInterval(() => {
-  countdown--;
-  if (countdown <= 0) countdown = 60;
-  document.getElementById("countdown").innerText = countdown;
-}, 1000);
+// Initial fetch
+fetchSignal();
 
-// ================= BINARY CHART =================
-function loadBinaryChart() {
-  if (binaryWidget) binaryWidget.remove();
-
-  binaryWidget = new TradingView.widget({
-    autosize: true,
-    symbol: "FX:EURUSD",
-    interval: "1",
-    timezone: "Asia/Kolkata",
-    theme: "dark",
-    style: "1",
-    hide_top_toolbar: false,
-    allow_symbol_change: false,
-    container_id: "tv-binary",
-    studies: [
-      "EMA@tv-basicstudies",
-      "ParabolicSAR@tv-basicstudies"
-    ]
-  });
-}
-
-loadBinaryChart();
-
-// 🔄 Telegram live fix
-setInterval(loadBinaryChart, 60000);
-
-// ================= STOCK CHART =================
-function loadAngelChart() {
-  if (angelWidget) angelWidget.remove();
-
-  angelWidget = new TradingView.widget({
-    autosize: true,
-    symbol: "NSE:RELIANCE",
-    interval: "5",
-    timezone: "Asia/Kolkata",
-    theme: "dark",
-    container_id: "tv-angel"
-  });
-}
-
-loadAngelChart();
-setInterval(loadAngelChart, 120000);
-
-// ================= SIGNAL FETCH =================
-async function getSignal() {
-  document.getElementById("signal").innerText = "Analyzing...";
-
-  try {
-    const res = await fetch("/api/binary/signal");
-    const data = await res.json();
-
-    document.getElementById("signal").innerHTML =
-      data.signal === "BUY"
-        ? "🟢 BUY ↑"
-        : "🔴 SELL ↓";
-
-  } catch {
-    document.getElementById("signal").innerText = "Error";
-  }
-}
+// Auto refresh every minute
+setInterval(fetchSignal, REFRESH_INTERVAL);

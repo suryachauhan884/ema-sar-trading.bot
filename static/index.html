@@ -1,51 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>TradeWin PRO</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <title>TradeWin PRO</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<link rel="stylesheet" href="/static/style.css">
-<script src="https://s3.tradingview.com/tv.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://s3.tradingview.com/tv.js"></script>
 </head>
 
 <body>
 
 <header>
-  <h2>📊 TradeWin PRO</h2>
-  <span class="status">🟢 Bot Active</span>
+    <h2>📊 TradeWin PRO</h2>
+    <span class="status">🟢 Bot Active</span>
 </header>
 
+<!-- ================= TABS ================= -->
 <div class="tabs">
-  <button onclick="showTab('binary')">Olymp Trade (Binary)</button>
-  <button onclick="showTab('stocks')">Angel One (Stocks)</button>
+    <button onclick="showTab('binary')">Olymp Trade (Binary)</button>
+    <button onclick="showTab('stocks')">Angel One (Stocks)</button>
 </div>
 
 <!-- ================= BINARY ================= -->
 <section id="binary" class="tab active">
 
-<h3>Olymp Trade – Binary Chart</h3>
-<p>Pair: <b>EUR/USD</b></p>
-<p>Timeframe: <b>1 Min</b></p>
+    <h3>Olymp Trade – Binary Chart</h3>
 
-<p>⏳ Candle closes in: <span id="countdown">60</span>s</p>
-<p>📈 Signal: <b id="signal">Waiting...</b></p>
+    <p>Pair: <b><span id="pair">EUR/USD</span></b></p>
+    <p>Timeframe: <b><span id="timeframe">1 Min</span></b></p>
+    <p>Strategy: <b><span id="strategy">Aggressive EMA + SAR</span></b></p>
+    <p>Confidence: <b><span id="confidence">--%</span></b></p>
 
-<div id="tv-binary" class="chart"></div>
+    <p>⏳ Candle closes in: <span id="countdown">60</span>s</p>
+    <p>📈 Signal: <b id="signal">Waiting...</b></p>
+    <p>Status: <b><span id="status">LIVE</span></b></p>
 
-<button onclick="getSignal()">📈 Get EMA + SAR Signal</button>
+    <div id="tv-binary" class="chart"></div>
 
+    <button onclick="getSignal()">📡 Get EMA + SAR Signal</button>
 </section>
 
 <!-- ================= STOCKS ================= -->
 <section id="stocks" class="tab">
 
-<h3>Angel One – Live Stock Chart</h3>
-<p>Stock: <b>RELIANCE</b></p>
-<p>Timeframe: <b>5 Min</b></p>
+    <h3>Angel One – Live Stock Chart</h3>
 
-<div id="tv-angel" class="chart"></div>
+    <p>Stock: <b>RELIANCE</b></p>
+    <p>Timeframe: <b>5 Min</b></p>
+    <p>Market: <b>NSE</b></p>
+    <p>Mode: <b>Analysis Only</b></p>
 
+    <div id="tv-angel" class="chart"></div>
 </section>
 
 <script src="/static/app.js"></script>
