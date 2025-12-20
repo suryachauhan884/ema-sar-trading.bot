@@ -14,9 +14,12 @@ app = FastAPI(title="TradeWin PRO")
 # ================= STATIC =================
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+import os
+
 @app.get("/")
 def dashboard():
-    return FileResponse("static/index.html")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return FileResponse(os.path.join(base_dir, "static", "index.html"))
 
 # ================= EMA + SAR LOGIC =================
 def ema_sar_signal():
